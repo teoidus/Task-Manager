@@ -3,8 +3,7 @@ class Time {
   static now() {
     return Date.now();
   }
-  // converts string w/ format ((scalar)(unit))+ (where (scalar) is any real and (unit) is any key of knownUnits)
-  // to ms
+  // converts string w/ format ((scalar)(unit))+ (where (scalar) is any real and (unit) is any key of knownUnits) to ms
   static parseDuration(s) {
     let scalars = s.split(/[^0-9.]+/).reverse().splice(1).reverse();
     let units = s.split(/[0-9.]+/).splice(1);
@@ -20,10 +19,9 @@ class Time {
     }
     return result;
   }
-  // converts string w/ format (time)( (date))?, where:
+  // converts string w/ format (time)( (date))? to ms, where:
   //   date has format ([1-9]|1[0-2])(-|/)([1-9]|(1|2)[0-9]|3(0|1))(-|/)(\d\d\d?\d?)? (month/day/year)
   //   time has format ([1-9]|1[0-2]):([1-9]|[1-5][0-9]):([1-9]|[1-5][0-9])(\.[0-9]*)? (hh:mm:ss.frac_seconds)
-  // to ms
   // all variables are assumed to be in current time zone, and then converted to utc.
   static parseStamp(s) {
     // split into date and time
