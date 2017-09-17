@@ -6,6 +6,8 @@
     <input id="i" style="font-family: monospace"></input>
     <div id="o"></div>
     <script>
+      // commands: + add, - del, @ mov move, * adj adjust, < op open, > cl close, ! un undo, ; new command
+      // TODO: for names, auto completion (fewest amount of characters to disambiguate)
       let i = document.getElementById('i');
       let o = document.getElementById('o');
       function adjustSizes() {

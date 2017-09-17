@@ -1,5 +1,8 @@
 class Time {
-  static now() { return Date.now(); }
+  // returns time in UTC
+  static now() {
+    return Date.now();
+  }
   // converts string w/ format ((scalar)(unit))+ (where (scalar) is any real and (unit) is any key of knownUnits)
   // to ms
   static parseDuration(s) {
@@ -21,6 +24,7 @@ class Time {
   //   date has format ([1-9]|1[0-2])(-|/)([1-9]|(1|2)[0-9]|3(0|1))(-|/)(\d\d\d?\d?)? (month/day/year)
   //   time has format ([1-9]|1[0-2]):([1-9]|[1-5][0-9]):([1-9]|[1-5][0-9])(\.[0-9]*)? (hh:mm:ss.frac_seconds)
   // to ms
+  // all variables are assumed to be in current time zone, and then converted to utc.
   static parseStamp(s) {
     // split into date and time
     let [time, date] = s.split(' ');
@@ -30,7 +34,7 @@ class Time {
     if (matches) var [_, m, _, d, _, y] = matches;
     
     // from time, extract (hh, mm, ss, frac, ampm)
-    var matches = new RegExp('([0-2][0-9])(:([0-5][0-9]|[1-9])(:([0-5][0-9]|[1-9])(\\.[0-9]*)?)?)?(am|pm)?').exec(time);
+    var matches = new RegExp('([0-2]?[0-9])(:([0-5][0-9]|[1-9])(:([0-5][0-9]|[1-9])(\\.[0-9]*)?)?)?(am|pm)?').exec(time);
     if (matches) var [_, hh, _, mm, _, ss, frac, ampm] = matches;
     
     // for any undefined date variables, default to current date
@@ -38,6 +42,8 @@ class Time {
     m = (typeof m != 'undefined') ? +m : current.getMonth()+1; // Date.getMonth is zero-based
     d = (typeof d != 'undefined') ? +d : current.getDate();
     y = (typeof y != 'undefined') ? +y : current.getFullYear();
+    
+    //console.log(JSON.stringify(date), JSON.stringify(time), JSON.stringify(m), JSON.stringify(d), JSON.stringify(y), JSON.stringify(hh), JSON.stringify(mm), JSON.stringify(ss), JSON.stringify(frac), JSON.stringify(ampm));
     
     // for any undefined time variables, default to current time //TODO: examine these defaults
     // ampm defaults to the current ampm state (if 3pm, 3 -> 3pm)
@@ -48,18 +54,24 @@ class Time {
     ss = (typeof ss != 'undefined') ? +ss : current.getSeconds();
     frac = (typeof frac != 'undefined') ? +frac : current.getMilliseconds()/1000;
     
-    //console.log(JSON.stringify(date), JSON.stringify(time), JSON.stringify(m), JSON.stringify(d), JSON.stringify(y), JSON.stringify(hh), JSON.stringify(mm), JSON.stringify(ss), JSON.stringify(frac), JSON.stringify(ampm));
     //console.log(m, d, y, hh, mm, ss, frac, ampm);
     //console.log(Date.UTC(y, m-1, d, hh, mm, ss, frac));
-    return Date.UTC(y, m-1, d, hh-1, mm, ss, frac); // for some reason, Date.UTC wants hours in [-1, 22]
+    return Date.UTC(y, m-1, d, hh, mm, ss, frac) + new Date().getTimezoneOffset() * 60 * 1000; // convert local time manipulations back to UTC
   }
-  // converts string w/ format (stamp)(\+(duration))? to ms
+  // converts string w/ format (stamp)((\++|--)(duration))? to ms
   static parse(s) {
-    var [stamp, duration] = s.split('+');
+    // extract sign
+    var sign = (s.indexOf('++') != -1) ? 1 : (s.indexOf('--') != -1) ? -1 : 0;
+    if (sign == 0)
+      throw 'Invalid time string "' + s + '" (missing ++ or -- operator)'; // TODO: make this optional
+    
+    // extract stamp and duration
+    var [stamp, duration] = s.split(/\+\+|--/);
     var stamp = (typeof stamp != 'undefined') ? Time.parseStamp(stamp) : Time.now();
     var duration = (typeof duration != 'undefined') ? Time.parseDuration(duration) : 0;
     
-    return stamp + duration;
+    // compute sum
+    return stamp + sign*duration;
   }
   static until(then) {
     return ((typeof then == 'string') ? Time.parse(then) : then) - Time.now();
@@ -67,14 +79,17 @@ class Time {
 }
 
 class Task {
-  constructor(name='', duration='0ms', deadline='00:00:00am 1-1-1970+8640000000000000ms', done=false) {
+  constructor(name='', duration='0ms', deadline='00:00:00am 1-1-1970++8640000000000000ms', done=false) {
     this.name = name;
     this.duration = Time.parseDuration(duration);
     this.deadline = Time.parse(deadline);
     this.done = done;
   }
   timeLeft() { return Time.until(this.deadline); }
-  copy() { return new Task(this.name, this.duration + 'ms', '00:00:00am 1-1-1970+' + this.deadline + 'ms', this.done); }
+  copy() { return new Task(this.name, this.duration + 'ms',
+    '00:00:00am 1-1-1970++' + (this.deadline - new Date().getTimezoneOffset() * 60 * 1000) + 'ms',
+    this.done); }
+  //TODO: getters/setters? then remove code from mgr that directly modifies fields? e.g. adjust, finish
 }
 
 class TaskManager {
@@ -94,7 +109,7 @@ class TaskManager {
     let allocated = 0.0;
     let tasks = [];
     for (let i in this.tasks) {
-      if (!this.tasks.done) {
+      if (!this.tasks[i].done) {
         allocated += Math.min(this.tasks[i].timeLeft(), this.tasks[i].duration);
         tasks.push(this.tasks[i].copy());
       }
@@ -123,18 +138,47 @@ class TaskManager {
     throw 'Could not find task with name "' + name + '"';
   }
   // marks a task as complete given its name
-  finish(name) {
+  close(name) {
     if (name in this.tasks)
-      this.tasks.done = true;
+      this.tasks[name].done = true;
+    else
+      throw 'Could not find task with name "' + name + '"';
+  }
+  // unmarks a task as complete given its name
+  open(name) {
+    if (name in this.tasks)
+      this.tasks[name].done = false;
+    else
+      throw 'Could not find task with name "' + name + '"';
+  }
+  // adjust a task's estimated duration
+  adjust(name, s) {
+    if (name in this.tasks)
+      this.tasks[name].duration = Time.parseDuration(s);
+    else
+      throw 'Could not find task with name "' + name + '"';
+  }
+  // move a task's deadline
+  move(name, s) {
+    if (name in this.tasks)
+      this.tasks[name].deadline = Time.parse(s);
     else
       throw 'Could not find task with name "' + name + '"';
   }
 }
 
-// commands: add, del, adj, done, undo
+// TODO: trims on parse()?
 
 // tests
-var t=  new TaskManager([new Task("a", "9h")], "+15h");
+var t =  new TaskManager([new Task("a", "9h")], "++15h");
 console.log(t.snapshot());
-t.add(new Task("b", "3h")); t.remove("a"); t.finish("b");
+t.add(new Task("b", "3h")); t.remove("a");
+console.log(t.snapshot());
+t.close("b");
+console.log(t.snapshot());
+t.open("b");
+console.log(t.snapshot());
+t.adjust("b", "6h");
+console.log(t.snapshot());
+t.move("b", "7pm++5h");
 console.log(t.snapshot());
