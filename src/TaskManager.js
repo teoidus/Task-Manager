@@ -39,14 +39,14 @@ class Time {
     d = (typeof d != 'undefined') ? +d : current.getDate();
     y = (typeof y != 'undefined') ? +y : current.getFullYear();
     
-    // for any undefined time variables, default to midnight or 0
+    // for any undefined time variables, default to current time
     // ampm defaults to the current ampm state (if 3pm, 3 -> 3pm)
     // pm hh are converted by +12s (3pm -> hh = 15)
     ampm = (typeof ampm != 'undefined') ? ampm : ['am', 'pm'][+(current.getHours() >= 12)];
-    hh = (typeof hh != 'undefined') ? +hh + {am:0,pm:12}[ampm] : 0;
-    mm = (typeof mm != 'undefined') ? +mm : 0;
-    ss = (typeof ss != 'undefined') ? +ss : 0;
-    frac = (typeof frac != 'undefined') ? +frac : 0;
+    hh = (typeof hh != 'undefined') ? +hh + {am:0,pm:12}[ampm] : current.getHours();
+    mm = (typeof mm != 'undefined') ? +mm : current.getMinutes();
+    ss = (typeof ss != 'undefined') ? +ss : current.getSeconds();
+    frac = (typeof frac != 'undefined') ? +frac : current.getMilliseconds()/1000;
     
     //console.log(JSON.stringify(date), JSON.stringify(time), JSON.stringify(m), JSON.stringify(d), JSON.stringify(y), JSON.stringify(hh), JSON.stringify(mm), JSON.stringify(ss), JSON.stringify(frac), JSON.stringify(ampm));
     //console.log(m, d, y, hh, mm, ss, frac, ampm);
@@ -66,10 +66,36 @@ class Time {
   }
 }
 
+class Task {
+  constructor(name='', duration='0ms', deadline='+8640000000000000ms', done=false) {
+    this.name = name;
+    this.duration = Time.parseDuration(duration);
+    this.deadline = Time.parse(deadline);
+    this.done = done;
+  }
+  timeLeft() { return Time.until(this.deadline); }
+}
+
 class TaskManager {
   constructor(tasks, deadline) {
-    this.tasks = {};
-    for (task in tasks) { this.tasks[task] = Time.parseDuration(task.time); }
     this.deadline = Time.parse(deadline);
+    this.tasks = tasks;
+  }
+  // returns, for the current moment, { free: freeTime, tasks: [{ name, timeLeft }] }
+  snapshot() {
+    let allocated = 0.0;
+    let tasks = [];
+    let globalTimeLeft = Time.until(this.deadline);
+    for (let i = 0; i < this.tasks.length; ++i) {
+      let timeLeft = Math.min(this.tasks[i].timeLeft(), globalTimeLeft);
+      allocated += Math.min(timeLeft, this.tasks[i].duration);
+      tasks.push({ name: this.tasks[i].name, timeLeft: timeLeft });
+    }
+    return {
+      free: globalTimeLeft - allocated,
+      tasks: tasks
+    };
   }
 }
+
+// commands: add, del, adj, fin 
