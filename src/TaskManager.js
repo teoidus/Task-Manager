@@ -89,13 +89,15 @@ class TaskManager {
       this.tasks[name].deadline = Math.min(tasks[i].deadline, this.deadline);
     }
   }
-  // returns, for the current moment, { free: freeTime, tasks: copy of this.tasks }
+  // returns, for the current moment, { free: freeTime, tasks: [uncompleted tasks] }
   snapshot() {
     let allocated = 0.0;
     let tasks = [];
     for (i in this.tasks) {
-      allocated += Math.min(this.tasks[i].timeLeft(), this.tasks[i].duration);
-      tasks.push(this.tasks[i].copy());
+      if (!this.tasks.done) {
+        allocated += Math.min(this.tasks[i].timeLeft(), this.tasks[i].duration);
+        tasks.push(this.tasks[i].copy());
+      }
     }
     return {
       free: Time.until(this.deadline) - allocated,
@@ -119,6 +121,13 @@ class TaskManager {
       return result;
     }
     throw 'Could not find task with name "' + name + '"';
+  }
+  // marks a task as complete given its name
+  finish(name) {
+    if (name in this.tasks)
+      this.tasks.done = true;
+    else
+      throw 'Could not find task with name "' + name + '"';
   }
 }
 
