@@ -30,7 +30,7 @@ class Time {
     if (matches) var [_, m, _, d, _, y] = matches;
     
     // from time, extract (hh, mm, ss, frac, ampm)
-    var matches = new RegExp('(2[0-3]|1[0-9]|[1-9])(:([0-5][0-9]|[1-9])(:([1-5][0-9]|[1-9])(\\.[0-9]*)?)?)?(am|pm)?').exec(time);
+    var matches = new RegExp('([0-2][0-9])(:([0-5][0-9]|[1-9])(:([0-5][0-9]|[1-9])(\\.[0-9]*)?)?)?(am|pm)?').exec(time);
     if (matches) var [_, hh, _, mm, _, ss, frac, ampm] = matches;
     
     // for any undefined date variables, default to current date
@@ -39,7 +39,7 @@ class Time {
     d = (typeof d != 'undefined') ? +d : current.getDate();
     y = (typeof y != 'undefined') ? +y : current.getFullYear();
     
-    // for any undefined time variables, default to current time
+    // for any undefined time variables, default to current time //TODO: examine these defaults
     // ampm defaults to the current ampm state (if 3pm, 3 -> 3pm)
     // pm hh are converted by +12s (3pm -> hh = 15)
     ampm = (typeof ampm != 'undefined') ? ampm : ['am', 'pm'][+(current.getHours() >= 12)];
@@ -67,35 +67,59 @@ class Time {
 }
 
 class Task {
-  constructor(name='', duration='0ms', deadline='+8640000000000000ms', done=false) {
+  constructor(name='', duration='0ms', deadline='00:00:00am 1-1-1970+8640000000000000ms', done=false) {
     this.name = name;
     this.duration = Time.parseDuration(duration);
     this.deadline = Time.parse(deadline);
     this.done = done;
   }
   timeLeft() { return Time.until(this.deadline); }
+  copy() { return new Task(this.name, this.duration + 'ms', '00:00:00am 1-1-1970+' + this.deadline + 'ms', this.done); }
 }
 
 class TaskManager {
   constructor(tasks, deadline) {
     this.deadline = Time.parse(deadline);
+    // convert task array to symbol table, set all deadlines to be <= global deadline
     this.tasks = tasks;
+    this.tasks = {};
+    for (let i = 0; i < tasks.length; ++i) {
+      let name = tasks[i].name;
+      this.tasks[name] = tasks[i].copy();
+      this.tasks[name].deadline = Math.min(tasks[i].deadline, this.deadline);
+    }
   }
-  // returns, for the current moment, { free: freeTime, tasks: [{ name, timeLeft }] }
+  // returns, for the current moment, { free: freeTime, tasks: copy of this.tasks }
   snapshot() {
     let allocated = 0.0;
     let tasks = [];
-    let globalTimeLeft = Time.until(this.deadline);
-    for (let i = 0; i < this.tasks.length; ++i) {
-      let timeLeft = Math.min(this.tasks[i].timeLeft(), globalTimeLeft);
-      allocated += Math.min(timeLeft, this.tasks[i].duration);
-      tasks.push({ name: this.tasks[i].name, timeLeft: timeLeft });
+    for (i in this.tasks) {
+      allocated += Math.min(this.tasks[i].timeLeft(), this.tasks[i].duration);
+      tasks.push(this.tasks[i].copy());
     }
     return {
-      free: globalTimeLeft - allocated,
+      free: Time.until(this.deadline) - allocated,
       tasks: tasks
     };
   }
+  // adds a task
+  add(task) {
+    if (!(task.name in this.tasks)) {
+      let name = task.name;
+      this.tasks[name] = task.copy();
+      this.tasks[name].deadline = Math.min(task.deadline, this.deadline);
+    } else
+      throw 'A task with name "' + task.name + '" already exists';
+  }
+  // removes a task given its name, and returns the task
+  remove(name) {
+    if (name in this.tasks) {
+      let result = this.tasks[name];
+      delete this.tasks[name];
+      return result;
+    }
+    throw 'Could not find task with name "' + name + '"';
+  }
 }
 
-// commands: add, del, adj, fin 
+// commands: add, del, adj, done, undo
