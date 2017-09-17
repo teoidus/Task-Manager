@@ -89,11 +89,11 @@ class TaskManager {
       this.tasks[name].deadline = Math.min(tasks[i].deadline, this.deadline);
     }
   }
-  // returns, for the current moment, { free: freeTime, tasks: [uncompleted tasks] }
+  // returns, for the current moment, { free: freeTime, todo: [uncompleted tasks] }
   snapshot() {
     let allocated = 0.0;
     let tasks = [];
-    for (i in this.tasks) {
+    for (let i in this.tasks) {
       if (!this.tasks.done) {
         allocated += Math.min(this.tasks[i].timeLeft(), this.tasks[i].duration);
         tasks.push(this.tasks[i].copy());
@@ -101,7 +101,7 @@ class TaskManager {
     }
     return {
       free: Time.until(this.deadline) - allocated,
-      tasks: tasks
+      todo: tasks
     };
   }
   // adds a task
@@ -132,3 +132,9 @@ class TaskManager {
 }
 
 // commands: add, del, adj, done, undo
+
+// tests
+var t=  new TaskManager([new Task("a", "9h")], "+15h");
+console.log(t.snapshot());
+t.add(new Task("b", "3h")); t.remove("a"); t.finish("b");
+console.log(t.snapshot());
